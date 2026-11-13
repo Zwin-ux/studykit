@@ -82,8 +82,13 @@ public actor SyncEngine {
 
     /// Call at launch and after any purchase, restore or refund with what StoreKit reports for THIS app.
     public func refreshOwnership(from source: PurchaseSource, now: Date = Date()) async throws {
-        let record = AppOwnership(app: app, owned: await source.currentEntitlements(), checkedAt: now)
-        guard ownership.records[app]?.owned != record.owned || ownership.records[app] == nil else { return }
+        let owned = await source.currentEntitlements()
+        guard ownership.records[app]?.owned != owned || ownership.records[app] == nil else { return }
+        // A change must always be newer than what it replaces, even if the device clock went backwards;
+        // otherwise a refund would lose the merge to its own stale "owned" record.
+        var stamp = now
+        if let last = ownership.records[app]?.checkedAt, stamp <= last { stamp = last.addingTimeInterval(1) }
+        let record = AppOwnership(app: app, owned: owned, checkedAt: stamp)
         ownership.merge(record)
         queue.ownershipPending = true
         try save()
@@ -104,9 +109,18 @@ public actor SyncEngine {
         try save()
     }
 
+    /// Pulls in what the other app wrote to the shared folder (ledger, profile, ownership) since we loaded.
+    /// Unreadable files are ignored here; `save` never overwrites the other app's files.
+    public func reloadShared() {
+        if let onDisk = try? ledgerFiles.load() { ledger.merge(onDisk.events.values) }
+        if let onDisk = try? profileFile.load() { profile = profile?.merged(with: onDisk) ?? onDisk }
+        if let onDisk = try? ownershipFiles.load() { for record in onDisk.records.values where record.app != app { ownership.merge(record) } }
+    }
+
     /// Uploads what is waiting, then pulls and merges. On any failure the queue is kept and the state is paused.
     @discardableResult
     public func sync(now: Date = Date()) async -> SyncState {
+        reloadShared()
         do {
             let waiting = queue.pendingEvents.compactMap { ledger.events[$0] }
             if !waiting.isEmpty { try await transport.upload(events: waiting) }
@@ -145,6 +159,8 @@ public actor SyncEngine {
     }
 
     private func save() throws {
+        // profile.json is shared by both apps: never overwrite a newer copy the other app wrote.
+        if let onDisk = try? profileFile.load() { profile = profile?.merged(with: onDisk) ?? onDisk }
         try ledgerFiles.save(ledger)
         if let profile { try profileFile.save(profile) }
         if let mine = ownership.records[app] { try ownershipFiles.save(mine) }

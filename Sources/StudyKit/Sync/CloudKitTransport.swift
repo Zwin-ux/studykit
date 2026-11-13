@@ -68,9 +68,9 @@ public struct CloudKitTransport: SyncTransport {
             for result in changes.modificationResultsByID.values {
                 let record = try result.get().record
                 switch record.recordType {
-                case "Event": if let event = event(record) { snapshot.events.append(event) }
-                case "Profile": snapshot.profile = profile(record)
-                case "Ownership": if let ownership = ownership(record) { snapshot.ownership.append(ownership) }
+                case "Event": if let event = Self.event(record) { snapshot.events.append(event) }
+                case "Profile": snapshot.profile = Self.profile(record)
+                case "Ownership": if let ownership = Self.ownership(record) { snapshot.ownership.append(ownership) }
                 default: break
                 }
             }
@@ -81,7 +81,7 @@ public struct CloudKitTransport: SyncTransport {
     }
 
     /// Records that do not parse are skipped, never guessed.
-    private func event(_ record: CKRecord) -> StudyEvent? {
+    static func event(_ record: CKRecord) -> StudyEvent? {
         guard let id = UUID(uuidString: record.recordID.recordName),
               let kind = (record["kind"] as? String).flatMap(StudyEvent.Kind.init(rawValue:)),
               let app = (record["app"] as? String).flatMap(StudyApp.init(rawValue:)),
@@ -91,15 +91,16 @@ public struct CloudKitTransport: SyncTransport {
         return StudyEvent(id: id, kind: kind, app: app, at: at, utcOffset: offset, xp: xp, subject: record["subject"] as? String)
     }
 
-    private func ownership(_ record: CKRecord) -> AppOwnership? {
+    static func ownership(_ record: CKRecord) -> AppOwnership? {
         guard let app = (record["app"] as? String).flatMap(StudyApp.init(rawValue:)),
               record.recordID.recordName == "ownership-\(app.rawValue)",
-              let owned = record["owned"] as? [String],
+              // CloudKit stores an empty list as no value, so a refund (nothing owned) reads back as nil.
+              let owned = Optional(record["owned"] as? [String] ?? []),
               let checkedAt = record["checkedAt"] as? Date else { return nil }
         return AppOwnership(app: app, owned: Set(owned.compactMap(StudyProduct.init(rawValue:))), checkedAt: checkedAt)
     }
 
-    private func profile(_ record: CKRecord) -> Profile? {
+    static func profile(_ record: CKRecord) -> Profile? {
         guard let avatar = (record["avatar"] as? String).flatMap(Avatar.init(slug:)),
               let updatedAt = record["updatedAt"] as? Date else { return nil }
         return Profile(avatar: avatar, displayName: record["displayName"] as? String, updatedAt: updatedAt)

@@ -14,7 +14,7 @@ let package = Package(
     targets: [
         .target(name: "StudyKit"),
         .target(name: "StudyKitAds", dependencies: ["StudyKit"]),
-        .testTarget(name: "StudyKitTests", dependencies: ["StudyKit"]),
+        .testTarget(name: "StudyKitTests", dependencies: ["StudyKit", "StudyKitAds"]),
         .testTarget(name: "StudyKitAdsTests", dependencies: ["StudyKitAds"]),
     ]
 )
