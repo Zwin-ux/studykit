@@ -1,15 +1,16 @@
 import XCTest
 @testable import StudyKit
 
-private func date(_ iso: String) -> Date { ISO8601DateFormatter().date(from: iso)! }
+func date(_ iso: String) -> Date { ISO8601DateFormatter().date(from: iso)! }
 private let pst = -8 * 3600, pdt = -7 * 3600, tokyo = 9 * 3600
 
 /// In-memory iCloud. `online = false` makes every call fail.
-private actor FakeCloud: SyncTransport {
+actor FakeCloud: SyncTransport {
     struct Offline: Error {}
     var online = true
     var ledger = Ledger()
     var profile: Profile?
+    var ownership = OwnershipFlags()
     var uploads = 0
     func setOnline(_ value: Bool) { online = value }
     func upload(events: [StudyEvent]) async throws {
@@ -21,13 +22,17 @@ private actor FakeCloud: SyncTransport {
         guard online else { throw Offline() }
         profile = profile?.merged(with: new) ?? new
     }
+    func upload(ownership record: AppOwnership) async throws {
+        guard online else { throw Offline() }
+        ownership.merge(record)
+    }
     func fetch() async throws -> RemoteSnapshot {
         guard online else { throw Offline() }
-        return RemoteSnapshot(events: Array(ledger.events.values), profile: profile)
+        return RemoteSnapshot(events: Array(ledger.events.values), profile: profile, ownership: Array(ownership.records.values))
     }
 }
 
-private func tempDir() -> URL { FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString) }
+func tempDir() -> URL { FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString) }
 
 final class LedgerTests: XCTestCase {
     func testSameEventCountsOnce() {
