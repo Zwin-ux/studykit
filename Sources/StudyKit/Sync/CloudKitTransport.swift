@@ -48,6 +48,16 @@ public struct CloudKitTransport: SyncTransport {
         for result in saved.values { _ = try result.get() }
     }
 
+    public func upload(ownership: AppOwnership) async throws {
+        try await ensureZone()
+        let record = CKRecord(recordType: "Ownership", recordID: CKRecord.ID(recordName: "ownership-\(ownership.app.rawValue)", zoneID: zoneID))
+        record["app"] = ownership.app.rawValue
+        record["owned"] = ownership.owned.map(\.rawValue).sorted()
+        record["checkedAt"] = ownership.checkedAt
+        let (saved, _) = try await database.modifyRecords(saving: [record], deleting: [], savePolicy: .allKeys, atomically: false)
+        for result in saved.values { _ = try result.get() }
+    }
+
     public func fetch() async throws -> RemoteSnapshot {
         try await ensureZone()
         var snapshot = RemoteSnapshot()
@@ -60,6 +70,7 @@ public struct CloudKitTransport: SyncTransport {
                 switch record.recordType {
                 case "Event": if let event = event(record) { snapshot.events.append(event) }
                 case "Profile": snapshot.profile = profile(record)
+                case "Ownership": if let ownership = ownership(record) { snapshot.ownership.append(ownership) }
                 default: break
                 }
             }
@@ -78,6 +89,14 @@ public struct CloudKitTransport: SyncTransport {
               let offset = record["utcOffset"] as? Int,
               let xp = record["xp"] as? Int else { return nil }
         return StudyEvent(id: id, kind: kind, app: app, at: at, utcOffset: offset, xp: xp, subject: record["subject"] as? String)
+    }
+
+    private func ownership(_ record: CKRecord) -> AppOwnership? {
+        guard let app = (record["app"] as? String).flatMap(StudyApp.init(rawValue:)),
+              record.recordID.recordName == "ownership-\(app.rawValue)",
+              let owned = record["owned"] as? [String],
+              let checkedAt = record["checkedAt"] as? Date else { return nil }
+        return AppOwnership(app: app, owned: Set(owned.compactMap(StudyProduct.init(rawValue:))), checkedAt: checkedAt)
     }
 
     private func profile(_ record: CKRecord) -> Profile? {
