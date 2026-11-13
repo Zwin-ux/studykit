@@ -92,9 +92,9 @@ final class IdentityTests: XCTestCase {
 
 final class ProfileTests: XCTestCase {
     func testEveryAvatarHasAUniqueSlugThatRoundTrips() {
-        XCTAssertEqual(Avatar.all.count, 144)
-        XCTAssertEqual(Set(Avatar.all.map(\.slug)).count, 144)
-        XCTAssertEqual(Set(Avatar.all.map(\.headSlug)).count, 72)
+        XCTAssertEqual(Avatar.all.count, 2 * 7 * 7 * 6 * 4)
+        XCTAssertEqual(Set(Avatar.all.map(\.slug)).count, 2352)
+        XCTAssertEqual(Set(Avatar.all.map(\.headSlug)).count, 2 * 7 * 7 * 6)
         for avatar in Avatar.all { XCTAssertEqual(Avatar(slug: avatar.slug), avatar) }
     }
 
@@ -145,5 +145,42 @@ final class ProfileTests: XCTestCase {
         try Data("not json".utf8).write(to: file.url)
         XCTAssertThrowsError(try file.load())
         XCTAssertEqual(try Data(contentsOf: file.url), Data("not json".utf8))
+    }
+
+    func testV1SlugsStillParse() {
+        XCTAssertEqual(Avatar(slug: "ponytail-warm-plum-teal-cream"), Avatar())
+        XCTAssertEqual(Avatar(slug: "bun-deep-silver-sage-coral"), Avatar(shape: .bun, skin: .deep, hair: .silver, scrubs: .sage, shoes: .coral))
+        XCTAssertEqual(Avatar(slug: "bun-umber-darkBrown-wine-black")?.hair, .darkBrown)
+    }
+
+    func testUnknownAvatarFromANewerBuildIsKeptNotOverwritten() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let newer = Data(#"{"avatar":"v3.straight.tone9.locs.black","pronouns":"xe","updatedAt":10}"#.utf8)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let file = ProfileFile(directory: dir)
+        try newer.write(to: file.url)
+
+        var profile = try XCTUnwrap(file.load())
+        XCTAssertEqual(profile.avatar, Avatar(), "draws the default")
+        XCTAssertEqual(profile.pronouns, .they, "unknown pronoun reads as neutral")
+        XCTAssertTrue(profile.setDisplayName("Sam", at: Date(timeIntervalSinceReferenceDate: 11)))
+        try file.save(profile)
+        XCTAssertEqual(try file.load()?.avatarSlug, "v3.straight.tone9.locs.black", "editing the name keeps the newer avatar")
+    }
+
+    func testProfileFilesWrittenBeforeSlugsStillLoad() throws {
+        let legacy = Data(#"{"avatar":{"shape":"bun","skin":"deep","hair":"silver","scrubs":"navy","shoes":"coral"},"displayName":"Ana","updatedAt":3}"#.utf8)
+        let profile = try JSONDecoder().decode(Profile.self, from: legacy)
+        XCTAssertEqual(profile.avatar, Avatar(shape: .bun, skin: .deep, hair: .silver, scrubs: .navy, shoes: .coral))
+        XCTAssertEqual(profile.displayName, "Ana")
+        XCTAssertEqual(profile.pronouns, .they)
+    }
+
+    func testPronounsRoundTripAndNeverChangeTheAvatar() throws {
+        let profile = Profile(avatar: Avatar(shape: .bun), pronouns: .he, updatedAt: Date(timeIntervalSince1970: 1))
+        let decoded = try JSONDecoder().decode(Profile.self, from: JSONEncoder().encode(profile))
+        XCTAssertEqual(decoded, profile)
+        XCTAssertEqual(decoded.avatar.shape, .bun)
     }
 }

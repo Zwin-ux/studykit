@@ -249,4 +249,16 @@ final class CloudKitRecordParsingTests: XCTestCase {
         let parsed = CloudKitTransport.ownership(record)
         XCTAssertEqual(parsed, AppOwnership(app: .nursebook, owned: [], checkedAt: at(5)))
     }
+
+    func testProfileRecordFromANewerBuildKeepsItsAvatarSlug() {
+        let id = CKRecord.ID(recordName: "profile", zoneID: CKRecordZone.ID(zoneName: "Study", ownerName: CKCurrentUserDefaultName))
+        let record = CKRecord(recordType: "Profile", recordID: id)
+        record["avatar"] = "v3.straight.tone9.locs.black"
+        record["pronouns"] = "she"
+        record["updatedAt"] = at(6)
+        let parsed = CloudKitTransport.profile(record)
+        XCTAssertEqual(parsed?.avatarSlug, "v3.straight.tone9.locs.black")
+        XCTAssertEqual(parsed?.pronouns, .she)
+        XCTAssertEqual(parsed?.avatar, Avatar())
+    }
 }

@@ -4,10 +4,12 @@ import Foundation
 /// names both apps and the design kit use. Appearance only: it never implies a credential.
 public struct Avatar: Codable, Hashable, Sendable {
     public enum Shape: String, Codable, CaseIterable, Sendable { case ponytail, bun }
-    public enum Skin: String, Codable, CaseIterable, Sendable { case light, warm, deep }
-    public enum Hair: String, Codable, CaseIterable, Sendable { case plum, black, silver }
-    public enum Scrubs: String, Codable, CaseIterable, Sendable { case teal, lavender, navy, sage }
-    public enum Shoes: String, Codable, CaseIterable, Sendable { case cream, coral }
+    // Raw values are stored in slugs and CloudKit: never rename one, only add. Order is picker order, lightest first.
+    // Tint hex values live with the art (One More Shift `CharacterAppearance.swift`, design kit `tokens.json`).
+    public enum Skin: String, Codable, CaseIterable, Sendable { case fair, light, warm, tan, deep, rich, umber }
+    public enum Hair: String, Codable, CaseIterable, Sendable { case black, darkBrown, brown, auburn, blonde, silver, plum }
+    public enum Scrubs: String, Codable, CaseIterable, Sendable { case teal, lavender, navy, sage, wine, black }
+    public enum Shoes: String, Codable, CaseIterable, Sendable { case cream, coral, white, black }
 
     public var shape: Shape
     public var skin: Skin

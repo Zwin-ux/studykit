@@ -41,7 +41,8 @@ public struct CloudKitTransport: SyncTransport {
     public func upload(profile: Profile) async throws {
         try await ensureZone()
         let record = CKRecord(recordType: "Profile", recordID: profileID)
-        record["avatar"] = profile.avatar.slug
+        record["avatar"] = profile.avatarSlug
+        record["pronouns"] = profile.pronouns.rawValue
         record["displayName"] = profile.displayName
         record["updatedAt"] = profile.updatedAt
         let (saved, _) = try await database.modifyRecords(saving: [record], deleting: [], savePolicy: .allKeys, atomically: false)
@@ -101,9 +102,11 @@ public struct CloudKitTransport: SyncTransport {
     }
 
     static func profile(_ record: CKRecord) -> Profile? {
-        guard let avatar = (record["avatar"] as? String).flatMap(Avatar.init(slug:)),
+        // An avatar slug this build cannot parse is kept as is (see `Profile.avatarSlug`).
+        guard let slug = record["avatar"] as? String, !slug.isEmpty,
               let updatedAt = record["updatedAt"] as? Date else { return nil }
-        return Profile(avatar: avatar, displayName: record["displayName"] as? String, updatedAt: updatedAt)
+        let pronouns = (record["pronouns"] as? String).flatMap(Pronouns.init(rawValue:)) ?? .they
+        return Profile(avatarSlug: slug, displayName: record["displayName"] as? String, pronouns: pronouns, updatedAt: updatedAt)
     }
 }
 #endif
